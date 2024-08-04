@@ -5,15 +5,19 @@ golangci_lint := github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.2
 examples/advanced/main.wasm: examples/advanced/main.go
 	@(cd $(@D); tinygo build -o main.wasm -gc=custom -tags=custommalloc -scheduler=none --no-debug -target=wasi .)
 
+
+examples/advanced-with-gc/main.wasm: examples/advanced-with-gc/main.go
+	@(cd $(@D); tinygo build -o main.wasm --no-debug -scheduler=none -target=wasi .)
+
 %/main.wasm: %/main.go
-	@(cd $(@D); tinygo build -o main.wasm -scheduler=none --no-debug -target=wasi .)
+	@(cd $(@D); tinygo build -o main.wasm --no-debug -target=wasi .)
 
 .PHONY: build-tinygo
 build-tinygo: examples/nodenumber/main.wasm examples/advanced/main.wasm guest/testdata/cyclestate/main.wasm guest/testdata/filter/main.wasm guest/testdata/score/main.wasm \
 			  guest/testdata/bind/main.wasm guest/testdata/reserve/main.wasm guest/testdata/handle/main.wasm
 
 %/main-debug.wasm: %/main.go
-	@(cd $(@D); tinygo build -o main-debug.wasm -gc=custom -tags=custommalloc -scheduler=none -target=wasi .)
+	@(cd $(@D); tinygo build -o main-debug.wasm -gc=leaking -target=wasi .)
 
 # Testing the guest code means running it with TinyGo, which internally
 # compiles the unit tests to a wasm binary, then runs it with wazero.
@@ -26,7 +30,7 @@ test-guest: guest/.tinygo-target.json
 # compiles the benchmarks to a wasm binary, then runs it with wazero.
 .PHONY: bench-guest
 bench-guest: guest/.tinygo-target.json
-	@(cd internal/e2e/guest; tinygo test -gc=custom -tags=custommalloc -scheduler=none -v -count=6 -target ../../../guest/.tinygo-target.json -run='^$$' -bench '^Benchmark.*$$' .)
+	@(cd internal/e2e/guest; tinygo test -gc=leaking -v -count=6 -target ../../../guest/.tinygo-target.json -run='^$$' -bench '^Benchmark.*$$' .)
 
 # By default, TinyGo's wasi target uses wasmtime. but our plugin uses wazero.
 # This makes a wasi target that uses the same wazero version as the scheduler.
@@ -56,7 +60,7 @@ profile: examples/advanced/main-debug.wasm
 
 .PHONY: bench-example
 bench-example:
-	@(cd internal/e2e/scheduler; go test -run='^$$' -bench '^BenchmarkExample.*$$' . -count=6)
+	@(cd internal/e2e/scheduler; go test -run='^$$' -timeout 20m -bench '^BenchmarkExample.*$$' . -count=1)
 
 .PHONY: scheduler-perf
 scheduler-perf:
