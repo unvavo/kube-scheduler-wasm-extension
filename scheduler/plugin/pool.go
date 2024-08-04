@@ -18,16 +18,22 @@ package wasm
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	"k8s.io/apimachinery/pkg/types"
 )
 
+type comparableCloser interface {
+	io.Closer
+	comparable
+}
+
 // guestPool manages guest to pod assignments in a scheduling or binding cycle.
 //
 // Assumptions made about the lifecycle are taken from the below diagram
 // https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/#extension-points
-type guestPool[guest comparable] struct {
+type guestPool[guest comparableCloser] struct {
 	// newGuest is a function to create a new guest.
 	newGuest func(context.Context) (guest, error)
 
@@ -35,8 +41,8 @@ type guestPool[guest comparable] struct {
 
 	// scheduledPodUID is the UID of the pod being scheduled.
 	scheduledPodUID types.UID
-	// scheduled is the guest being scheduled.
-	scheduled guest
+	// scheduling is the guest scheduling a Pod.
+	scheduling guest
 
 	// binding are any guests in the binding cycle.
 	binding map[types.UID]guest
@@ -45,17 +51,22 @@ type guestPool[guest comparable] struct {
 	free []guest
 }
 
-func newGuestPool[guest comparable](ctx context.Context, newGuest func(context.Context) (guest, error)) (*guestPool[guest], error) {
+func newGuestPool[guest comparableCloser](ctx context.Context, newGuest func(context.Context) (guest, error)) (*guestPool[guest], error) {
 	// Eagerly add one instance to the pool. Doing so helps to fail fast.
-	g, createErr := newGuest(ctx)
-	if createErr != nil {
-		return nil, createErr
+	num := 10
+	guests := make([]guest, 0, num)
+	for i := 0; i < num; i++ {
+		g, createErr := newGuest(ctx)
+		if createErr != nil {
+			return nil, createErr
+		}
+		guests = append(guests, g)
 	}
 
 	return &guestPool[guest]{
 		newGuest: newGuest,
 		binding:  make(map[types.UID]guest),
-		free:     []guest{g},
+		free:     guests,
 	}, nil
 }
 
@@ -68,8 +79,8 @@ func (p *guestPool[guest]) doWithGuest(ctx context.Context, fn func(guest)) (err
 	p.scheduledPodUID = ""
 	var g, zero guest
 
-	if g = p.scheduled; g != zero { // Prefer last scheduled
-		p.scheduled = zero
+	if g = p.scheduling; g != zero { // Prefer last scheduled
+		p.scheduling = zero
 	} else if len(p.free) > 0 { // Then, the free pool
 		g = p.free[0]
 		p.free = p.free[1:]
@@ -80,6 +91,27 @@ func (p *guestPool[guest]) doWithGuest(ctx context.Context, fn func(guest)) (err
 	fn(g)
 	p.put(g)
 	return
+}
+
+func (p *guestPool[guest]) closePrevious() {
+	var zero guest
+	scheduling := p.scheduling
+	if scheduling == zero {
+		return
+	}
+	p.mux.Lock()
+	p.scheduling = zero
+	p.mux.Unlock()
+	go func() {
+		scheduling.Close()
+		newG, err := p.newGuest(context.Background())
+		if err != nil {
+			return
+		}
+		p.mux.Lock()
+		p.put(newG)
+		p.mux.Unlock()
+	}()
 }
 
 // doWithSchedulingGuest runs the function with a guest used for scheduling
@@ -104,7 +136,7 @@ func (p *guestPool[guest]) doWithSchedulingGuest(ctx context.Context, podUID typ
 	// difference.
 	p.scheduledPodUID = podUID
 	var zero guest
-	if scheduled := p.scheduled; scheduled != zero {
+	if scheduled := p.scheduling; scheduled != zero {
 		fn(scheduled)
 		return nil
 	}
@@ -113,7 +145,7 @@ func (p *guestPool[guest]) doWithSchedulingGuest(ctx context.Context, podUID typ
 	if len(p.free) > 0 {
 		g := p.free[0]
 		p.free = p.free[1:]
-		p.scheduled = g
+		p.scheduling = g
 		fn(g)
 		return nil
 	}
@@ -121,7 +153,7 @@ func (p *guestPool[guest]) doWithSchedulingGuest(ctx context.Context, podUID typ
 	// If we're at this point, the guest previously scheduled was re-assigned
 	// to the binding cycle. Create a new guest.
 	if g, err := p.newGuest(ctx); err == nil {
-		p.scheduled = g
+		p.scheduling = g
 		fn(g)
 		return nil
 	} else {
@@ -147,9 +179,9 @@ func (p *guestPool[guest]) getForBinding(podUID types.UID) guest {
 
 	// We re-used the guest from the scheduling cycle for the binding cycle,
 	// so that it doesn't have to unmarshal the pod again.
-	if scheduled := p.scheduled; scheduled != zero {
+	if scheduled := p.scheduling; scheduled != zero {
 		p.scheduledPodUID = ""
-		p.scheduled = zero
+		p.scheduling = zero
 		p.binding[podUID] = scheduled
 		return scheduled
 	}
@@ -166,7 +198,13 @@ func (p *guestPool[guest]) freeFromBinding(podUID types.UID) {
 
 	if g, ok := p.binding[podUID]; ok {
 		delete(p.binding, podUID)
-		p.put(g)
+		g.Close()
+		// Binding cycles are running concurrently, so it's OK to take time to create a new guest.
+		newG, err := p.newGuest(context.Background())
+		if err != nil {
+			return
+		}
+		p.put(newG)
 	}
 }
 

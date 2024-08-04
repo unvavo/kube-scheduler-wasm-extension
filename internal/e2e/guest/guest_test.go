@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"testing"
 
-	_ "github.com/wasilibs/nottinygc"
-
 	"sigs.k8s.io/kube-scheduler-wasm-extension/guest/api/proto"
 	klogapi "sigs.k8s.io/kube-scheduler-wasm-extension/guest/klog/api"
 	protoapi "sigs.k8s.io/kube-scheduler-wasm-extension/kubernetes/proto/api"

@@ -21,8 +21,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
+
+	"runtime/pprof"
 
 	v1 "k8s.io/api/core/v1"
 	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +78,13 @@ func testExample_NodeNumber(t *testing.T, advanced bool) {
 
 	ctx := context.Background()
 	recorder := &test.FakeRecorder{EventMsg: ""}
-	plugin := newNodeNumberPlugin(ctx, t, advanced, false, 0, recorder)
+
+	kind := kindSimple
+	if advanced {
+		kind = kindAdvanced
+	}
+
+	plugin := newNodeNumberPlugin(ctx, t, kind, false, 0, recorder)
 	defer plugin.(io.Closer).Close()
 
 	pod := &v1.Pod{ObjectMeta: v1meta.ObjectMeta{Name: "happy8-meta"}, Spec: v1.PodSpec{NodeName: "happy8"}}
@@ -130,7 +139,12 @@ func testExample_NodeNumber(t *testing.T, advanced bool) {
 		var buf bytes.Buffer
 		klog.SetOutput(&buf)
 
-		reversed := newNodeNumberPlugin(ctx, t, advanced, true, 0, recorder)
+		kind := kindSimple
+		if advanced {
+			kind = kindAdvanced
+		}
+
+		reversed := newNodeNumberPlugin(ctx, t, kind, true, 0, recorder)
 		defer reversed.(io.Closer).Close()
 
 		score := e2e.RunAll(ctx, t, reversed, pod, nodeInfoWithName("glad8"))
@@ -152,21 +166,39 @@ func testExample_NodeNumber(t *testing.T, advanced bool) {
 }
 
 func BenchmarkExample_NodeNumber(b *testing.B) {
-	b.Run("Simple", func(b *testing.B) {
-		benchmarkExample_NodeNumber(b, false, 3)
+	// b.Run("Simple", func(b *testing.B) {
+	// 	benchmarkExample_NodeNumber(b, kindSimple, 3)
+	// })
+	// b.Run("Simple Log", func(b *testing.B) {
+	// 	benchmarkExample_NodeNumber(b, kindSimple, 0)
+	// })
+	b.Run("OnlyFilter Advanced", func(b *testing.B) {
+		benchmarkExample_NodeNumberOnlyFilter(b, kindAdvanced, 3)
 	})
-	b.Run("Simple Log", func(b *testing.B) {
-		benchmarkExample_NodeNumber(b, false, 0)
+	b.Run("OnlyFilter Advanced (with normal gc)", func(b *testing.B) {
+		benchmarkExample_NodeNumberOnlyFilter(b, kindAdvancedWithGC, 3)
 	})
+
 	b.Run("Advanced", func(b *testing.B) {
-		benchmarkExample_NodeNumber(b, true, 3)
+		benchmarkExample_NodeNumber(b, kindAdvanced, 3)
 	})
-	b.Run("Advanced Log", func(b *testing.B) {
-		benchmarkExample_NodeNumber(b, true, 0)
+	b.Run("Advanced (with normal gc)", func(b *testing.B) {
+		benchmarkExample_NodeNumber(b, kindAdvancedWithGC, 3)
 	})
+	// b.Run("Advanced Log (with normal gc)", func(b *testing.B) {
+	// 	benchmarkExample_NodeNumber(b, kindAdvancedWithGC, 0)
+	//})
 }
 
-func benchmarkExample_NodeNumber(b *testing.B, advanced bool, logSeverity int32) {
+type kind int
+
+const (
+	kindSimple kind = iota
+	kindAdvanced
+	kindAdvancedWithGC
+)
+
+func benchmarkExample_NodeNumber(b *testing.B, k kind, logSeverity int32) {
 	b.Helper()
 	// Reinit klog for tests.
 	fs := k8stest.InitKlog(b)
@@ -178,18 +210,28 @@ func benchmarkExample_NodeNumber(b *testing.B, advanced bool, logSeverity int32)
 
 	ctx := context.Background()
 
-	b.Run("New", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			newNodeNumberPlugin(ctx, b, advanced, false, logSeverity, recorder).(io.Closer).Close()
-		}
-	})
+	// b.Run("New", func(b *testing.B) {
+	// 	b.ResetTimer()
+	// 	for i := 0; i < b.N; i++ {
+	// 		newNodeNumberPlugin(ctx, b, kindAdvanced, false, logSeverity, recorder).(io.Closer).Close()
+	// 	}
+	// })
 
-	plugin := newNodeNumberPlugin(ctx, b, advanced, false, logSeverity, recorder)
+	plugin := newNodeNumberPlugin(ctx, b, k, false, logSeverity, recorder)
 	defer plugin.(io.Closer).Close()
 
 	pod := *test.PodReal // copy
 	pod.Spec.NodeName = "happy8"
+
+	f, err := os.Create("cpu2.pprof")
+	if err != nil {
+		panic(err)
+	}
+
+	if err := pprof.StartCPUProfile(f); err != nil {
+		panic(err)
+	}
+	defer pprof.StopCPUProfile()
 
 	b.Run("Run", func(b *testing.B) {
 		b.ResetTimer()
@@ -202,11 +244,71 @@ func benchmarkExample_NodeNumber(b *testing.B, advanced bool, logSeverity int32)
 	})
 }
 
-func newNodeNumberPlugin(ctx context.Context, t e2e.Testing, advanced, reverse bool, logSeverity int32, recorder events.EventRecorder) framework.Plugin {
+func benchmarkExample_NodeNumberOnlyFilter(b *testing.B, k kind, logSeverity int32) {
+	b.Helper()
+	// Reinit klog for tests.
+	fs := k8stest.InitKlog(b)
+	// Disable timestamps.
+	fs.Set("skip_headers", "true") //nolint
+
+	klog.SetOutput(io.Discard)
+	recorder := &test.FakeRecorder{EventMsg: ""}
+
+	ctx := context.Background()
+
+	// b.Run("New", func(b *testing.B) {
+	// 	b.ResetTimer()
+	// 	for i := 0; i < b.N; i++ {
+	// 		newNodeNumberPlugin(ctx, b, kindAdvanced, false, logSeverity, recorder).(io.Closer).Close()
+	// 	}
+	// })
+
+	plugin := newNodeNumberPlugin(ctx, b, k, false, logSeverity, recorder)
+	defer plugin.(io.Closer).Close()
+
+	pod := *test.PodReal // copy
+	pod.Spec.NodeName = "happy8"
+
+	f, err := os.Create("cpu2.pprof")
+	if err != nil {
+		panic(err)
+	}
+
+	if err := pprof.StartCPUProfile(f); err != nil {
+		panic(err)
+	}
+	defer pprof.StopCPUProfile()
+
+	b.Run("Run", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			var s *framework.Status
+			if p, ok := plugin.(framework.PreFilterPlugin); ok {
+				_, s = p.PreFilter(ctx, nil, &pod)
+				if !s.IsSuccess() {
+					panic(s.Message())
+				}
+			}
+			if filterP, ok := plugin.(framework.ScorePlugin); ok {
+				_, s = filterP.Score(ctx, nil, &pod, "happy8")
+				if !s.IsSuccess() {
+					panic(s.Message())
+				}
+			}
+		}
+	})
+}
+
+func newNodeNumberPlugin(ctx context.Context, t e2e.Testing, k kind, reverse bool, logSeverity int32, recorder events.EventRecorder) framework.Plugin {
 	t.Helper()
-	guestURL := test.URLExampleNodeNumber
-	if advanced {
+	var guestURL string
+	switch k {
+	case kindSimple:
+		guestURL = test.URLExampleNodeNumber
+	case kindAdvanced:
 		guestURL = test.URLExampleAdvanced
+	case kindAdvancedWithGC:
+		guestURL = test.URLExampleAdvancedWithGC
 	}
 	handle := &test.FakeHandle{Recorder: recorder}
 

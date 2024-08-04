@@ -223,6 +223,8 @@ func (pl *wasmPlugin) PreFilterExtensions() framework.PreFilterExtensions {
 // PreFilter implements the same method as documented on
 // framework.PreFilterPlugin.
 func (pl *wasmPlugin) PreFilter(ctx context.Context, _ *framework.CycleState, pod *v1.Pod) (result *framework.PreFilterResult, status *framework.Status) {
+	pl.pool.closePrevious()
+
 	// We implement PreFilterPlugin with FilterPlugin, even when the guest doesn't.
 	if pl.guestInterfaces&iPreFilterPlugin == 0 {
 		return nil, nil // unimplemented
@@ -403,12 +405,13 @@ var _ framework.PostBindPlugin = (*wasmPlugin)(nil)
 
 // PostBind implements the same method as documented on framework.PostBindPlugin.
 func (pl *wasmPlugin) PostBind(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) {
+	defer pl.pool.freeFromBinding(pod.UID) // the cycle is over, put it back into the pool.
+
 	// We implement PostBindPlugin with BindPlugin, even when the guest doesn't.
 	if pl.guestInterfaces&iPostBindPlugin == 0 {
 		return // unimplemented
 	}
 
-	defer pl.pool.freeFromBinding(pod.UID) // the cycle is over, put it back into the pool.
 	params := &stack{pod: pod, nodeName: nodeName}
 	ctx = context.WithValue(ctx, stackKey{}, params)
 	g := pl.pool.getForBinding(pod.UID)

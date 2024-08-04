@@ -115,6 +115,13 @@ func (pl *wasmPlugin) newGuest(ctx context.Context) (*guest, error) {
 	}, nil
 }
 
+func (g *guest) Close() error {
+	if err := g.guest.Close(context.Background()); err != nil {
+		return fmt.Errorf("wasm: error closing guest: %w", err)
+	}
+	return nil
+}
+
 // eventsToRegister calls guestExportEnqueue.
 func (g *guest) eventsToRegister(ctx context.Context) []framework.ClusterEvent {
 	defer g.out.Reset()

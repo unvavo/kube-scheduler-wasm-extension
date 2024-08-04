@@ -70,9 +70,6 @@ func RunAll(ctx context.Context, t Testing, plugin framework.Plugin, pod *v1.Pod
 func MaybeRunPreFilter(ctx context.Context, t Testing, plugin framework.Plugin, pod *v1.Pod) {
 	t.Helper()
 
-	// We always implement EnqueueExtensions for simplicity
-	_ = plugin.(framework.EnqueueExtensions).EventsToRegister()
-
 	if p, ok := plugin.(framework.PreFilterPlugin); ok {
 		_, s := p.PreFilter(ctx, nil, pod)
 		RequireSuccess(t, s)

@@ -31,6 +31,8 @@ type testGuest struct {
 	val int
 }
 
+func (testGuest) Close() error { return nil }
+
 func Test_guestPool_doWithGuest(t *testing.T) {
 	uid := uuid.NewUUID()
 
@@ -54,7 +56,7 @@ func Test_guestPool_doWithGuest(t *testing.T) {
 		t.Fatalf("expected no scheduling cycles")
 	}
 
-	if pl.scheduled != nil {
+	if pl.scheduling != nil {
 		t.Fatalf("expected no scheduling cycles")
 	}
 
@@ -72,7 +74,7 @@ func Test_guestPool_doWithGuest(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to get guest instance: %v", err)
 	}
-	if pl.scheduledPodUID != "" || pl.scheduled != nil {
+	if pl.scheduledPodUID != "" || pl.scheduling != nil {
 		t.Fatalf("expected to clear scheduling cycle")
 	}
 
@@ -122,7 +124,7 @@ func Test_guestPool_doWithSchedulingGuest(t *testing.T) {
 	if want, have := uid, pl.scheduledPodUID; want != have {
 		t.Fatalf("unexpected scheduledPodUID: want %v, have %v", want, have)
 	}
-	if want, have := g1, pl.scheduled; !reflect.DeepEqual(want, have) {
+	if want, have := g1, pl.scheduling; !reflect.DeepEqual(want, have) {
 		t.Fatalf("unexpected scheduled: want %v, have %v", want, have)
 	}
 
@@ -173,7 +175,7 @@ func Test_guestPool_getForBinding(t *testing.T) {
 		t.Fatalf("expected no scheduling cycles")
 	}
 
-	if pl.scheduled != nil {
+	if pl.scheduling != nil {
 		t.Fatalf("expected no scheduling cycles")
 	}
 

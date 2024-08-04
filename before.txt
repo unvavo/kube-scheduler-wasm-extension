@@ -1,0 +1,11 @@
+goos: darwin
+goarch: arm64
+pkg: sigs.k8s.io/kube-scheduler-wasm-extension/internal/e2e/scheduler
+BenchmarkExample_NodeNumber/Advanced/Run-12     	   32100	     37256 ns/op
+BenchmarkExample_NodeNumber/Advanced/Run-12     	   32289	     37037 ns/op
+BenchmarkExample_NodeNumber/Advanced/Run-12     	   31852	     36959 ns/op
+BenchmarkExample_NodeNumber/Advanced/Run-12     	   32515	     36882 ns/op
+BenchmarkExample_NodeNumber/Advanced/Run-12     	   32623	     37338 ns/op
+BenchmarkExample_NodeNumber/Advanced/Run-12     	   32181	     38122 ns/op
+PASS
+ok  	sigs.k8s.io/kube-scheduler-wasm-extension/internal/e2e/scheduler	10.617s
