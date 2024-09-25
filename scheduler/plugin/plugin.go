@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -92,7 +93,7 @@ func newWasmPlugin(ctx context.Context, pluginName string, runtime wazero.Runtim
 		guestModule:       guestModule,
 		guestArgs:         config.Args,
 		guestInterfaces:   guestInterfaces,
-		guestModuleConfig: wazero.NewModuleConfig(),
+		guestModuleConfig: wazero.NewModuleConfig().WithStdout(os.Stdout).WithStderr(os.Stderr).WithStartFunctions(),
 		instanceCounter:   atomic.Uint64{},
 	}
 

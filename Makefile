@@ -3,10 +3,10 @@ gosimports    := github.com/rinchsan/gosimports/cmd/gosimports@v0.3.8
 golangci_lint := github.com/golangci/golangci-lint/cmd/golangci-lint@v1.53.2
 
 examples/advanced/main.wasm: examples/advanced/main.go
-	@(cd $(@D); tinygo build -o main.wasm -gc=custom -tags=custommalloc -scheduler=none --no-debug -target=wasi .)
+	@(cd $(@D); GOARCH=wasm GOOS=wasip1 gotip build -buildmode=c-shared -tags wasm -o main.wasm .)
 
 %/main.wasm: %/main.go
-	@(cd $(@D); tinygo build -o main.wasm -scheduler=none --no-debug -target=wasi .)
+	@(cd $(@D); GOARCH=wasm GOOS=wasip1 gotip build -buildmode=c-shared -tags wasm -o main.wasm .)
 
 .PHONY: build-tinygo
 build-tinygo: examples/nodenumber/main.wasm examples/advanced/main.wasm guest/testdata/cyclestate/main.wasm guest/testdata/filter/main.wasm guest/testdata/score/main.wasm \

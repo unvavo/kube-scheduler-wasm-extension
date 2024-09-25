@@ -43,23 +43,33 @@ var _ func() = _enqueue
 
 // enqueue is only exported to the host.
 //
-//export enqueue
+//go:wasmexport enqueue
 func _enqueue() {
+	println("0")
 	if enqueue == nil { // Then, the user didn't define one.
 		// This is likely caused by use of plugin.Set(p), where 'p' didn't
 		// implement EnqueueExtensions: return to use default events.
 		return
 	}
 
+	println("1")
+
 	clusterEvents := enqueue.EventsToRegister()
+	println("2")
 
 	// If plugin returned clusterEvents, encode them and call the host with the
 	// count and memory region.
 	encoded := encodeClusterEvents(clusterEvents)
+	println("3")
 	if encoded != nil {
+		println("4")
 		ptr := uint32(uintptr(unsafe.Pointer(&encoded[0])))
+		println("5")
 		size := uint32(len(encoded))
+		println("6")
 		setClusterEventsResult(ptr, size)
+		println("7")
 		runtime.KeepAlive(encoded) // until ptr is no longer needed.
+		println("8")
 	}
 }
