@@ -64,7 +64,7 @@ data:
       pluginConfig:
         - name: wasmplugin1
           args:
-            guestURL: "https://github.com/kubernetes-sigs/kube-scheduler-wasm-extension/raw/refs/heads/main/examples/nodenumber/main.wasm"
+            guestURL: "https://github.com/unvavo/kube-scheduler-wasm-extension/raw/refs/heads/study/examples/nodenumber/main.wasm"
 ---
 apiVersion: apps/v1
 kind: Deployment
