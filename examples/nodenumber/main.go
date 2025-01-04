@@ -109,6 +109,7 @@ func (pl *NodeNumber) PreScore(state api.CycleState, pod proto.Pod, _ api.NodeIn
 // Score implements api.ScorePlugin
 func (pl *NodeNumber) Score(state api.CycleState, pod proto.Pod, nodeName string) (int32, *api.Status) {
 	klog.InfoS("execute Score on NodeNumber plugin", "pod", klog.KObj(pod))
+	klog.InfoS("test from unvavo", "pod", klog.KObj(pod))
 
 	var match bool
 	if data, ok := state.Read(preScoreStateKey); ok {
